@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Archery Master</title>
+    <style>
+        :root {
+            --ui-font: 'Segoe UI', system-ui, sans-serif;
+            --primary: #4CAF50;
+            --primary-dark: #388E3C;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            touch-action: none; /* Prevent scroll/zoom on mobile */
+        }
+
+        /* 9:16 Portrait Game Container */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 600px;
+            aspect-ratio: 9/16;
+            background: #87CEEB;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        @media (min-aspect-ratio: 9/16) {
+            #game-container {
+                height: 100vh;
+                width: calc(100vh * (9/16));
+            }
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Let canvas handle touches */
+            font-family: var(--ui-font);
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 15px;
+            transition: opacity 0.3s;
+        }
+
+        .hud-arrows {
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: rgba(0,0,0,0.4);
+            padding: 8px 15px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .hud-score {
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: rgba(0,0,0,0.4);
+            padding: 8px 15px;
+            border-radius: 20px;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .hud-player {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+            font-weight: 900;
+            background: rgba(0,0,0,0.6);
+            padding: 5px 20px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .hud-score svg {
+            filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+        }
+
+        .wind-indicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 50%;
+            width: 70px;
+            height: 70px;
+            justify-content: center;
+            border: 2px solid rgba(255,255,255,0.3);
+            margin-top: 50px; /* Pushed down slightly to make room for player name */
+        }
+
+        .wind-val {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .wind-arrow {
+            font-size: 1.5rem;
+            line-height: 1;
+            transition: transform 0.3s ease;
+        }
+
+        .floating-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            font-weight: 900;
+            color: #FFD700;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.5), 0 0 20px rgba(255, 215, 0, 0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .floating-text.show {
+            opacity: 1;
+            transform: translate(-50%, -80%) scale(1.2);
+        }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 20;
+            pointer-events: auto;
+            transition: opacity 0.3s;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .title {
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 4px 0 #388E3C, 0 8px 15px rgba(0,0,0,0.5);
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            color: #ccc;
+            text-align: center;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 30px;
+            box-shadow: 0 6px 0 var(--primary-dark), 0 10px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+            font-family: inherit;
+            width: 80%;
+            max-width: 300px;
+            margin-bottom: 15px;
+        }
+
+        .btn.blue {
+            background: #2196F3;
+            box-shadow: 0 6px 0 #1565C0, 0 10px 10px rgba(0,0,0,0.3);
+        }
+
+        .btn.orange {
+            background: #FF9800;
+            box-shadow: 0 6px 0 #E65100, 0 10px 10px rgba(0,0,0,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 rgba(0,0,0,0.5), 0 4px 4px rgba(0,0,0,0.3);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+            font-size: 1.3rem;
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 15px;
+            width: 80%;
+            max-width: 350px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div class="hud-top" id="hud" style="display: none;">
+            <div class="hud-player" id="ui-player-name">Player 1</div>
+            <div class="hud-arrows">🏹 <span>x</span> <span id="ui-arrows">3</span></div>
+            <div class="wind-indicator">
+                <div class="wind-arrow" id="ui-wind-dir">➡️</div>
+                <div class="wind-val"><span id="ui-wind-val">2.5</span></div>
+            </div>
+            <div class="hud-score">
+                <svg width="22" height="22" viewBox="0 0 100 100" style="display: inline-block;">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="#FFFFFF" stroke-width="10"/>
+                    <circle cx="50" cy="50" r="33" fill="none" stroke="#FF3333" stroke-width="10"/>
+                    <circle cx="50" cy="50" r="21" fill="none" stroke="#FFD700" stroke-width="10"/>
+                    <circle cx="50" cy="50" r="8" fill="#FFD700"/>
+                </svg>
+                <span>Score: <span id="ui-score">0</span></span>
+            </div>
+        </div>
+        
+        <div class="floating-text" id="floating-score">+10</div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="screen-start" class="screen">
+        <svg width="100" height="100" viewBox="0 0 100 100" style="margin-bottom: 20px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));">
+            <circle cx="50" cy="50" r="45" fill="#FFFFFF" stroke="#000000" stroke-width="4"/>
+            <circle cx="50" cy="50" r="36" fill="#1A237E"/>
+            <circle cx="50" cy="50" r="27" fill="#00E5FF"/>
+            <circle cx="50" cy="50" r="18" fill="#FF3333"/>
+            <circle cx="50" cy="50" r="9" fill="#FFD700"/>
+        </svg>
+        <div class="title">ARCHERY<br>MASTER</div>
+        <div class="subtitle">Touch anywhere to aim fully powered</div>
+        <button class="btn" id="btn-solo">SOLO</button>
+        <button class="btn blue" id="btn-ai">VS AI</button>
+        <button class="btn orange" id="btn-friend">PASS & PLAY</button>
+    </div>
+
+    <!-- Turn Transition Screen -->
+    <div id="screen-turn" class="screen hidden">
+        <div class="title" id="turn-title">PLAYER 1</div>
+        <div class="subtitle" id="turn-subtitle">Round 1 / 3</div>
+        <button class="btn" id="btn-ready">I'M READY</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="screen-over" class="screen hidden">
+        <div class="title" id="over-title" style="font-size: 2.5rem;">MATCH OVER</div>
+        <div class="stats-grid" id="over-stats">
+            <!-- Populated via JS -->
+        </div>
+        <button class="btn" id="btn-home">MAIN MENU</button>
+    </div>
+</div>
+
+<script>
+/**
+ * ARCHERY MASTER - COMPLETE GAME ENGINE
+ * Single File HTML5 Canvas + Procedural Math 3D
+ */
+
+// --- CONFIGURATION ---
+const CONFIG = {
+    FOCAL_LENGTH: 400,
+    GRAVITY: 800,
+    WIND_MULTIPLIER: 180,
+    MAX_DRAG: 250,
+    BASE_Z_VELOCITY: 2000,
+    ARROW_SPEED_MULTIPLIER: 1500,
+    TARGET_START_Z: 2500,
+    TARGET_STEP_Z: 400,
+    SENSITIVITY: 1.2, 
+    MAX_ROUNDS: 3,
+    RINGS: [
+        { radius: 20, score: 10, color: '#FFD700' }, // Yellow
+        { radius: 40, score: 8, color: '#FF3333' },  // Red
+        { radius: 60, score: 6, color: '#00E5FF' },  // Cyan
+        { radius: 80, score: 4, color: '#1A237E' },  // Dark Blue
+        { radius: 100, score: 2, color: '#FFFFFF' }  // White
+    ]
+};
+
+// --- GLOBAL STATE ---
+const State = {
+    screen: 'START', // START, PLAYING, FLYING, HIT_ANIMATION, TURN_TRANSITION, GAME_OVER
+    mode: 'SOLO', // 'SOLO', 'AI', 'PVP'
+    players: [],
+    currentPlayer: 0,
+    round: 1,
+    arrowsLeft: 3,
+    wind: 0,
+    
+    // Physics / World
+    targetZ: CONFIG.TARGET_START_Z,
+    targetX: 0,
+    targetY: -50,
+    
+    // Camera
+    cam: { x: 0, y: -100, z: -100 },
+    camTarget: { x: 0, y: -100, z: -100 },
+    shake: 0,
+    
+    // Input
+    isDragging: false,
+    dragStart: { x: 0, y: 0 },
+    dragCurrent: { x: 0, y: 0 },
+    
+    // Entities
+    arrow: null, // Current flying arrow
+    stuckArrows: [],
+    particles: [],
+    trees: [],
+    mountains: []
+};
+
+// --- AUDIO SYSTEM (Procedural Web Audio API) ---
+const AudioSys = {
+    ctx: null,
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    },
+    playShoot() {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.3);
+        
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+    },
+    playHit(score) {
+        if (!this.ctx) return;
+        // Thud
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(20, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+
+        // Ding for points
+        if (score > 0) {
+            const dingOsc = this.ctx.createOscillator();
+            const dingGain = this.ctx.createGain();
+            dingOsc.type = 'sine';
+            dingOsc.frequency.setValueAtTime(400 + score * 40, this.ctx.currentTime);
+            dingGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+            dingGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+            dingOsc.connect(dingGain);
+            dingGain.connect(this.ctx.destination);
+            dingOsc.start();
+            dingOsc.stop(this.ctx.currentTime + 0.5);
+        }
+    }
+};
+
+// --- DOM ELEMENTS & SETUP ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false }); // Optimize
+let width, height, CX, CY;
+
+function resize() {
+    const container = document.getElementById('game-container');
+    width = container.clientWidth;
+    height = container.clientHeight;
+    
+    // Support High DPI displays
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    CX = width / 2;
+    CY = height / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// UI Elements
+const uiHud = document.getElementById('hud');
+const uiArrows = document.getElementById('ui-arrows');
+const uiScore = document.getElementById('ui-score');
+const uiWindVal = document.getElementById('ui-wind-val');
+const uiWindDir = document.getElementById('ui-wind-dir');
+const uiFloatingScore = document.getElementById('floating-score');
+const uiPlayerName = document.getElementById('ui-player-name');
+
+// Screens
+const screenStart = document.getElementById('screen-start');
+const screenTurn = document.getElementById('screen-turn');
+const screenOver = document.getElementById('screen-over');
+
+const turnTitle = document.getElementById('turn-title');
+const turnSubtitle = document.getElementById('turn-subtitle');
+const overTitle = document.getElementById('over-title');
+const overStats = document.getElementById('over-stats');
+
+// Buttons
+const btnReady = document.getElementById('btn-ready');
+const btnHome = document.getElementById('btn-home');
+
+// --- 3D MATH HELPERS ---
+function project(p) {
+    let camX = State.cam.x + (Math.random() - 0.5) * State.shake;
+    let camY = State.cam.y + (Math.random() - 0.5) * State.shake;
+    let camZ = State.cam.z;
+
+    let dz = p.z - camZ;
+    if (dz < 10) dz = 10;
+    let scale = CONFIG.FOCAL_LENGTH / dz;
+    let x = CX + (p.x - camX) * scale;
+    let y = CY + (p.y - camY) * scale;
+    return { x, y, scale };
+}
+
+function getImpactPoint(dx, dy, pull) {
+    let pRatio = pull / CONFIG.MAX_DRAG;
+    let vz = CONFIG.BASE_Z_VELOCITY + (pRatio * CONFIG.ARROW_SPEED_MULTIPLIER);
+    let vx = -dx * CONFIG.SENSITIVITY; 
+    let vy = -dy * CONFIG.SENSITIVITY;
+    
+    let t = State.targetZ / vz;
+    let finalX = vx * t + 0.5 * (State.wind * CONFIG.WIND_MULTIPLIER) * t * t;
+    let finalY = vy * t + 0.5 * CONFIG.GRAVITY * t * t;
+    
+    return { x: finalX, y: finalY, z: State.targetZ };
+}
+
+// --- WORLD GENERATION ---
+function generateEnvironment() {
+    State.trees = [];
+    State.mountains = [];
+    
+    for(let i=0; i<5; i++) {
+        State.mountains.push({
+            cx: (Math.random() - 0.5) * width * 1.5,
+            height: height * 0.2 + Math.random() * height * 0.2,
+            width: width * 0.5 + Math.random() * width,
+            color: `hsl(210, ${30 + Math.random()*20}%, ${40 + Math.random()*10}%)`
+        });
+    }
+
+    for (let z = 200; z < 4000; z += 300) {
+        State.trees.push({ x: -400 - Math.random() * 200, z: z, s: 0.8 + Math.random()*0.5 });
+        State.trees.push({ x: 400 + Math.random() * 200, z: z, s: 0.8 + Math.random()*0.5 });
+    }
+}
+
+// --- GAME & MULTIPLAYER LOGIC ---
+function setupMatch(mode) {
+    generateEnvironment();
+    State.mode = mode;
+    State.round = 1;
+    State.currentPlayer = 0;
+    
+    // Initialize Players
+    State.players = [{ name: 'Player 1', score: 0, color: '#f44336', isAI: false }];
+    
+    if (mode === 'AI') {
+        State.players.push({ name: 'AI Bot', score: 0, color: '#2196F3', isAI: true });
+    } else if (mode === 'PVP') {
+        State.players.push({ name: 'Player 2', score: 0, color: '#2196F3', isAI: false });
+    }
+
+    screenStart.classList.add('hidden');
+    startTurn();
+}
+
+function startTurn() {
+    State.screen = 'TURN_TRANSITION';
+    uiHud.style.display = 'none';
+    screenOver.classList.add('hidden');
+    
+    // Generate Round Conditions (Only when P1 starts a new round)
+    if (State.currentPlayer === 0) {
+        State.wind = (Math.random() * 10 - 5); 
+        State.targetZ = CONFIG.TARGET_START_Z + (State.round - 1) * CONFIG.TARGET_STEP_Z;
+    }
+    
+    let p = State.players[State.currentPlayer];
+    
+    if (p.isAI) {
+        // Skip turn transition for AI, jump right in
+        startRoundPlaying();
+    } else {
+        screenTurn.classList.remove('hidden');
+        turnTitle.textContent = p.name;
+        turnTitle.style.color = p.color;
+        turnSubtitle.textContent = `Round ${State.round} / ${CONFIG.MAX_ROUNDS}`;
+    }
+}
+
+function startRoundPlaying() {
+    screenTurn.classList.add('hidden');
+    uiHud.style.display = 'flex';
+    
+    State.arrowsLeft = 3;
+    State.stuckArrows = []; // Clear board for fairness
+    State.arrow = null;
+    State.screen = 'PLAYING';
+    
+    resetCamera();
+    updateHUD();
+
+    // Trigger AI routine if needed
+    if (State.players[State.currentPlayer].isAI) {
+        triggerAIAimAndShoot();
+    }
+}
+
+function triggerAIAimAndShoot() {
+    if (State.screen !== 'PLAYING' || !State.players[State.currentPlayer].isAI) return;
+    
+    // AI Thinking Delay
+    setTimeout(() => {
+        if (State.screen !== 'PLAYING') return;
+
+        // Determine target position
+        let targetX = State.targetX;
+        let targetY = State.targetY;
+        
+        // Add artificial "difficulty" noise (imperfection)
+        let noiseFactor = 45; 
+        let aimX = targetX + (Math.random() - 0.5) * noiseFactor;
+        let aimY = targetY + (Math.random() - 0.5) * noiseFactor;
+        
+        // Reverse calculate the required Vx and Vy to hit (aimX, aimY)
+        let pull = CONFIG.MAX_DRAG;
+        let pRatio = 1.0;
+        let vz = CONFIG.BASE_Z_VELOCITY + (pRatio * CONFIG.ARROW_SPEED_MULTIPLIER);
+        let t = State.targetZ / vz;
+        
+        let windAccel = State.wind * CONFIG.WIND_MULTIPLIER;
+        let vx = (aimX - 0.5 * windAccel * t * t) / t;
+        let vy = (aimY - 0.5 * CONFIG.GRAVITY * t * t) / t;
+
+        spawnArrow(vx, vy, vz);
+    }, 1500);
+}
+
+function endTurn() {
+    State.currentPlayer++;
+    
+    if (State.currentPlayer >= State.players.length) {
+        // Both players have gone, advance round
+        State.currentPlayer = 0;
+        State.round++;
+    }
+    
+    if (State.round > CONFIG.MAX_ROUNDS) {
+        endMatch();
+    } else {
+        startTurn();
+    }
+}
+
+function endMatch() {
+    State.screen = 'GAME_OVER';
+    uiHud.style.display = 'none';
+    screenOver.classList.remove('hidden');
+    
+    if (State.players.length === 1) {
+        overTitle.textContent = "MATCH CLEARED";
+        overTitle.style.color = "white";
+        overStats.innerHTML = `
+            <div>Final Score:</div>
+            <div style="text-align: right; font-weight: bold;">${State.players[0].score}</div>
+        `;
+    } else {
+        let p1 = State.players[0];
+        let p2 = State.players[1];
+        
+        if (p1.score > p2.score) {
+            overTitle.textContent = `${p1.name} WINS!`;
+            overTitle.style.color = p1.color;
+        } else if (p2.score > p1.score) {
+            overTitle.textContent = `${p2.name} WINS!`;
+            overTitle.style.color = p2.color;
+        } else {
+            overTitle.textContent = "IT'S A TIE!";
+            overTitle.style.color = "white";
+        }
+        
+        overStats.innerHTML = `
+            <div style="color: ${p1.color}">${p1.name}:</div>
+            <div style="text-align: right; font-weight: bold;">${p1.score}</div>
+            <div style="color: ${p2.color}">${p2.name}:</div>
+            <div style="text-align: right; font-weight: bold;">${p2.score}</div>
+        `;
+    }
+}
+
+function resetCamera() {
+    State.camTarget = { x: 0, y: -150, z: -200 };
+}
+
+function spawnArrow(vx, vy, vz) {
+    let p = State.players[State.currentPlayer];
+    State.arrow = {
+        x: 0, y: 0, z: 0,
+        vx: vx, vy: vy, vz: vz,
+        pitch: 0, yaw: 0,
+        color: p.color
+    };
+    State.screen = 'FLYING';
+    State.arrowsLeft--;
+    updateHUD();
+    AudioSys.playShoot();
+}
+
+function updatePhysics(dt) {
+    if (State.screen !== 'FLYING' || !State.arrow) return;
+
+    let a = State.arrow;
+    let prevZ = a.z;
+    let prevX = a.x;
+    let prevY = a.y;
+
+    a.vy += CONFIG.GRAVITY * dt;
+    a.vx += State.wind * CONFIG.WIND_MULTIPLIER * dt;
+
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+    a.z += a.vz * dt;
+
+    a.pitch = Math.atan2(a.vy, a.vz);
+    a.yaw = Math.atan2(a.vx, a.vz);
+
+    // Collision Check
+    if (prevZ < State.targetZ && a.z >= State.targetZ) {
+        let ratio = (State.targetZ - prevZ) / (a.z - prevZ);
+        let hitX = prevX + (a.x - prevX) * ratio;
+        let hitY = prevY + (a.y - prevY) * ratio;
+        handleCollision(hitX, hitY);
+    }
+    
+    // Miss (Ground)
+    if (a.y > 200) { 
+        handleMiss();
+    }
+}
+
+function handleCollision(hitX, hitY) {
+    let dist = Math.hypot(hitX - State.targetX, hitY - State.targetY);
+    let score = 0;
+    
+    for (let ring of CONFIG.RINGS) {
+        if (dist <= ring.radius) {
+            score = ring.score;
+            break;
+        }
+    }
+
+    if (score > 0) {
+        State.players[State.currentPlayer].score += score;
+        State.shake = 15;
+        
+        State.stuckArrows.push({
+            x: hitX, y: hitY, z: State.targetZ,
+            yaw: State.arrow.yaw, pitch: State.arrow.pitch,
+            color: State.arrow.color
+        });
+        
+        spawnParticles(hitX, hitY, State.targetZ, score);
+        showFloatingScore(`+${score}`);
+        AudioSys.playHit(score);
+
+        State.camTarget = { x: hitX, y: hitY, z: State.targetZ - 300 };
+    } else {
+        AudioSys.playHit(0);
+        showFloatingScore('MISS');
+    }
+
+    State.arrow = null; 
+    State.screen = 'HIT_ANIMATION';
+    updateHUD();
+    
+    setTimeout(() => {
+        State.shake = 0;
+        resetCamera();
+        
+        if (State.arrowsLeft > 0) {
+            State.screen = 'PLAYING';
+            if (State.players[State.currentPlayer].isAI) {
+                triggerAIAimAndShoot();
+            }
+        } else {
+            endTurn();
+        }
+    }, 1500);
+}
+
+function handleMiss() {
+    State.arrow = null;
+    State.screen = 'HIT_ANIMATION';
+    AudioSys.playHit(0);
+    showFloatingScore('MISS');
+    
+    setTimeout(() => {
+        resetCamera();
+        if (State.arrowsLeft > 0) {
+            State.screen = 'PLAYING';
+            if (State.players[State.currentPlayer].isAI) {
+                triggerAIAimAndShoot();
+            }
+        } else {
+            endTurn();
+        }
+    }, 1000);
+}
+
+function spawnParticles(x, y, z, score) {
+    let color = score === 10 ? '#FFD700' : '#FFFFFF';
+    let count = score * 3 + 10;
+    
+    for (let i = 0; i < count; i++) {
+        State.particles.push({
+            x: x, y: y, z: z - 5,
+            vx: (Math.random() - 0.5) * 300,
+            vy: (Math.random() - 0.5) * 300 - 100,
+            vz: (Math.random() - 0.5) * 100,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+// --- RENDER LOGIC ---
+
+function drawBackground() {
+    let grad = ctx.createLinearGradient(0, 0, 0, height/2);
+    grad.addColorStop(0, '#5390D9');
+    grad.addColorStop(1, '#80FFDB');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    State.mountains.forEach(m => {
+        ctx.fillStyle = m.color;
+        ctx.beginPath();
+        ctx.moveTo(m.cx - m.width/2, height*0.6);
+        ctx.lineTo(m.cx, height*0.6 - m.height);
+        ctx.lineTo(m.cx + m.width/2, height*0.6);
+        ctx.fill();
+    });
+
+    ctx.fillStyle = '#4CAF50';
+    ctx.fillRect(0, height/2, width, height/2);
+}
+
+function drawGrid() {
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    
+    let p1 = project({ x: -100, y: 0, z: 0 });
+    let p2 = project({ x: -100, y: 0, z: State.targetZ + 1000 });
+    let p3 = project({ x: 100, y: 0, z: State.targetZ + 1000 });
+    let p4 = project({ x: 100, y: 0, z: 0 });
+
+    ctx.fillStyle = '#388E3C';
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(p4.x, p4.y);
+    ctx.fill();
+
+    for(let z=500; z <= State.targetZ; z+=500) {
+        let left = project({x: -300, y: 0, z: z});
+        let right = project({x: 300, y: 0, z: z});
+        if(left.y > height/2 && left.scale > 0) {
+            ctx.beginPath();
+            ctx.moveTo(left.x, left.y);
+            ctx.lineTo(right.x, right.y);
+            ctx.stroke();
+        }
+    }
+}
+
+function drawTree(tree) {
+    let base = project({x: tree.x, y: 0, z: tree.z});
+    if (base.scale <= 0 || base.z < State.cam.z) return;
+
+    let h = 300 * tree.s * base.scale;
+    let w = 100 * tree.s * base.scale;
+
+    ctx.fillStyle = '#5D4037';
+    ctx.fillRect(base.x - w*0.1, base.y - h*0.2, w*0.2, h*0.2);
+
+    ctx.fillStyle = '#2E7D32';
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y - h);
+    ctx.lineTo(base.x + w/2, base.y - h*0.2);
+    ctx.lineTo(base.x - w/2, base.y - h*0.2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#1B5E20'; 
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y - h);
+    ctx.lineTo(base.x + w/2, base.y - h*0.2);
+    ctx.lineTo(base.x, base.y - h*0.2);
+    ctx.fill();
+}
+
+function drawTarget() {
+    let center = project({ x: State.targetX, y: State.targetY, z: State.targetZ });
+    if (center.scale <= 0) return;
+
+    ctx.strokeStyle = '#5D4037';
+    ctx.lineWidth = 6 * center.scale;
+    ctx.lineCap = 'round';
+
+    let legLeft = project({ x: State.targetX - 45, y: State.targetY + 130, z: State.targetZ });
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(legLeft.x, legLeft.y);
+    ctx.stroke();
+
+    let legRight = project({ x: State.targetX + 45, y: State.targetY + 130, z: State.targetZ });
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(legRight.x, legRight.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#3E2723';
+    let legBack = project({ x: State.targetX, y: State.targetY + 140, z: State.targetZ + 30 });
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(legBack.x, legBack.y);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 104 * center.scale, 0, Math.PI * 2);
+    ctx.fillStyle = '#3E2723';
+    ctx.fill();
+    ctx.strokeStyle = '#271207';
+    ctx.lineWidth = 2 * center.scale;
+    ctx.stroke();
+
+    for (let i = CONFIG.RINGS.length - 1; i >= 0; i--) {
+        let ring = CONFIG.RINGS[i];
+        let r = ring.radius * center.scale;
+        
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = ring.color;
+        ctx.fill();
+        ctx.lineWidth = 1 * center.scale;
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 2 * center.scale, 0, Math.PI * 2);
+    ctx.fillStyle = '#FF0000';
+    ctx.fill();
+}
+
+function drawStuckArrow(arrow) {
+    let tip = project({ x: arrow.x, y: arrow.y, z: arrow.z });
+    const len = 150;
+    let tailX = arrow.x - Math.sin(arrow.yaw) * len;
+    let tailY = arrow.y - Math.sin(arrow.pitch) * len;
+    let tailZ = arrow.z - Math.cos(arrow.yaw) * Math.cos(arrow.pitch) * len;
+    let tail = project({ x: tailX, y: tailY, z: tailZ });
+
+    if(tip.scale > 0 && tail.scale > 0) {
+        ctx.beginPath();
+        ctx.moveTo(tip.x, tip.y);
+        ctx.lineTo(tail.x, tail.y);
+        ctx.strokeStyle = '#D7CCC8';
+        ctx.lineWidth = 3 * tail.scale;
+        ctx.stroke();
+
+        ctx.fillStyle = arrow.color || '#f44336';
+        ctx.beginPath();
+        ctx.arc(tail.x, tail.y, 4 * tail.scale, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+function drawFlyingArrow() {
+    if (!State.arrow) return;
+    
+    let a = State.arrow;
+    let head = project(a);
+    const len = 150;
+    let tailX = a.x - Math.sin(a.yaw) * len;
+    let tailY = a.y - Math.sin(a.pitch) * len;
+    let tailZ = a.z - Math.cos(a.yaw) * Math.cos(a.pitch) * len;
+    let tail = project({ x: tailX, y: tailY, z: tailZ });
+
+    if(head.scale > 0 && tail.scale > 0) {
+        ctx.beginPath();
+        ctx.moveTo(head.x, head.y);
+        ctx.lineTo(tail.x, tail.y);
+        ctx.strokeStyle = '#FFF';
+        ctx.lineWidth = 4 * head.scale;
+        ctx.stroke();
+
+        ctx.fillStyle = a.color || '#f44336';
+        ctx.beginPath();
+        ctx.arc(tail.x, tail.y, 5 * tail.scale, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+function drawParticles(dt) {
+    for (let i = State.particles.length - 1; i >= 0; i--) {
+        let p = State.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        p.vy += CONFIG.GRAVITY * 0.5 * dt; 
+        p.life -= dt * 1.5;
+
+        if (p.life <= 0) {
+            State.particles.splice(i, 1);
+            continue;
+        }
+
+        let proj = project(p);
+        if (proj.scale > 0) {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            let size = 10 * proj.scale;
+            ctx.fillRect(proj.x - size/2, proj.y - size/2, size, size);
+            ctx.globalAlpha = 1.0;
+        }
+    }
+}
+
+function drawAimingReticle() {
+    if (State.screen !== 'PLAYING' || !State.isDragging) return;
+    // Don't draw reticle for AI
+    if (State.players[State.currentPlayer].isAI) return;
+
+    let dx = State.dragCurrent.x - State.dragStart.x;
+    let dy = State.dragCurrent.y - State.dragStart.y;
+    let pull = CONFIG.MAX_DRAG; 
+
+    let impactPoint = getImpactPoint(dx, dy, pull);
+    let projectedImpact = project(impactPoint);
+    let aimX = projectedImpact.x;
+    let aimY = projectedImpact.y;
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+    ctx.moveTo(aimX - 25, aimY); ctx.lineTo(aimX + 25, aimY);
+    ctx.moveTo(aimX, aimY - 25); ctx.lineTo(aimX, aimY + 25);
+    ctx.stroke();
+
+    ctx.fillStyle = '#FF3333';
+    ctx.beginPath();
+    ctx.arc(aimX, aimY, 3, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawBowUI() {
+    if (State.screen !== 'PLAYING' || !State.isDragging) return;
+    if (State.players[State.currentPlayer].isAI) return;
+
+    let dx = State.dragCurrent.x - State.dragStart.x;
+    let dy = State.dragCurrent.y - State.dragStart.y;
+    let pull = CONFIG.MAX_DRAG;
+
+    drawTrajectory(dx, dy, pull);
+}
+
+function drawTrajectory(dx, dy, pull) {
+    let pRatio = pull / CONFIG.MAX_DRAG;
+    let vz = CONFIG.BASE_Z_VELOCITY + (pRatio * CONFIG.ARROW_SPEED_MULTIPLIER);
+    let vx = -dx * CONFIG.SENSITIVITY; 
+    let vy = -dy * CONFIG.SENSITIVITY;
+    
+    let simX = 0, simY = 0, simZ = 0;
+    let simVy = vy;
+    let simVx = vx;
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    let dt = 0.05; 
+    
+    for(let i=0; i<15; i++) {
+        simX += simVx * dt;
+        simY += simVy * dt;
+        simZ += vz * dt;
+        simVy += CONFIG.GRAVITY * dt;
+        simVx += State.wind * CONFIG.WIND_MULTIPLIER * dt; 
+        
+        let p = project({x: simX, y: simY, z: simZ});
+        if(p.scale > 0 && p.z < State.targetZ) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 4 * p.scale, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+}
+
+// --- UI UPDATES ---
+function updateHUD() {
+    let p = State.players[State.currentPlayer];
+    
+    uiPlayerName.textContent = p.name;
+    uiPlayerName.style.color = p.color;
+
+    uiArrows.textContent = State.arrowsLeft;
+    uiScore.textContent = p.score;
+    
+    uiWindVal.textContent = Math.abs(State.wind).toFixed(1);
+    let arrowAngle = State.wind > 0 ? 0 : 180; 
+    uiWindDir.style.transform = `rotate(${arrowAngle}deg)`;
+    if(State.wind === 0) uiWindDir.style.opacity = 0.2;
+    else uiWindDir.style.opacity = 1;
+}
+
+let scoreTimeout;
+function showFloatingScore(text) {
+    uiFloatingScore.textContent = text;
+    uiFloatingScore.classList.remove('show');
+    void uiFloatingScore.offsetWidth; 
+    uiFloatingScore.classList.add('show');
+    
+    clearTimeout(scoreTimeout);
+    scoreTimeout = setTimeout(() => {
+        uiFloatingScore.classList.remove('show');
+    }, 2000);
+}
+
+// --- INPUT HANDLING ---
+function onPointerDown(e) {
+    AudioSys.init(); 
+    if (State.screen !== 'PLAYING') return;
+    if (State.players[State.currentPlayer].isAI) return; // Prevent input if AI turn
+    
+    State.isDragging = true;
+    State.dragStart = { x: e.clientX, y: e.clientY };
+    State.dragCurrent = { x: e.clientX, y: e.clientY };
+}
+
+function onPointerMove(e) {
+    if (!State.isDragging) return;
+    State.dragCurrent = { x: e.clientX, y: e.clientY };
+}
+
+function onPointerUp(e) {
+    if (!State.isDragging || State.screen !== 'PLAYING') {
+        State.isDragging = false;
+        return;
+    }
+    
+    State.isDragging = false;
+    
+    let dx = State.dragCurrent.x - State.dragStart.x;
+    let dy = State.dragCurrent.y - State.dragStart.y;
+    
+    let pull = CONFIG.MAX_DRAG; 
+    let pRatio = 1.0; 
+    
+    let vz = CONFIG.BASE_Z_VELOCITY + (pRatio * CONFIG.ARROW_SPEED_MULTIPLIER);
+    let vx = -dx * CONFIG.SENSITIVITY; 
+    let vy = -dy * CONFIG.SENSITIVITY;
+    
+    spawnArrow(vx, vy, vz);
+}
+
+window.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup', onPointerUp);
+
+// Button Listeners
+document.getElementById('btn-solo').addEventListener('click', () => setupMatch('SOLO'));
+document.getElementById('btn-ai').addEventListener('click', () => setupMatch('AI'));
+document.getElementById('btn-friend').addEventListener('click', () => setupMatch('PVP'));
+
+btnReady.addEventListener('click', () => {
+    startRoundPlaying();
+});
+
+btnHome.addEventListener('click', () => {
+    screenOver.classList.add('hidden');
+    screenStart.classList.remove('hidden');
+    State.screen = 'START';
+});
+
+
+// --- MAIN LOOP ---
+let lastTime = 0;
+function loop(timestamp) {
+    let dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    if (dt > 0.1) dt = 0.1;
+
+    State.cam.x += (State.camTarget.x - State.cam.x) * 5 * dt;
+    State.cam.y += (State.camTarget.y - State.cam.y) * 5 * dt;
+    State.cam.z += (State.camTarget.z - State.cam.z) * 5 * dt;
+    
+    if(State.shake > 0) {
+        State.shake -= dt * 30;
+        if(State.shake < 0) State.shake = 0;
+    }
+
+    updatePhysics(dt);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
+    
+    let renderables = [];
+    
+    State.trees.forEach(t => renderables.push({ type: 'tree', obj: t, z: t.z }));
+    renderables.push({ type: 'target', z: State.targetZ });
+    State.stuckArrows.forEach(a => renderables.push({ type: 'stuck', obj: a, z: a.z }));
+    if (State.arrow) renderables.push({ type: 'flying', z: State.arrow.z });
+    
+    renderables.sort((a, b) => b.z - a.z); 
+
+    drawGrid(); 
+
+    for(let item of renderables) {
+        if(item.z < State.cam.z) continue; 
+        
+        if(item.type === 'tree') drawTree(item.obj);
+        else if(item.type === 'target') drawTarget();
+        else if(item.type === 'stuck') drawStuckArrow(item.obj);
+        else if(item.type === 'flying') drawFlyingArrow();
+    }
+
+    drawParticles(dt);
+    drawAimingReticle();
+    drawBowUI();
+
+    requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
+</script>
+  <!-- Fullscreen Launcher -->
+<div id="fullscreen-start" style="
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:#000;
+display:flex;
+justify-content:center;
+align-items:center;
+z-index:999999;
+">
+    <button onclick="startFullscreen()" style="
+    padding:20px 40px;
+    font-size:24px;
+    font-weight:bold;
+    cursor:pointer;
+    border:none;
+    border-radius:10px;
+    background:#4ade80;
+    color:#000;
+    ">
+        PLAY FULLSCREEN
+    </button>
+</div>
+
+<script>
+function startFullscreen() {
+    const elem = document.documentElement;
+
+    if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+    } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+    } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+    }
+
+    document.getElementById("fullscreen-start").style.display = "none";
+}
+
+document.addEventListener("fullscreenchange", () => {
+    const overlay = document.getElementById("fullscreen-start");
+
+    if (!document.fullscreenElement) {
+        overlay.style.display = "flex";
+    } else {
+        overlay.style.display = "none";
+    }
+});
+</script>
+</body>
+</html>
